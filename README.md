@@ -53,3 +53,10 @@ so logical. I added an `-includes` arg which allows you only to include the
 packages you want in the json. Passing this flag allows me to avoid the stack
 overflow for my project, since I only really need to know about shared
 _internal_ deps.
+
+UPDATE: Tried a non-recursive version to get around the stack frame problem. But
+now with a long/complex dep file, the main loop slows to a crawl, pretty sure
+it's the copying of the recursive data structure. My next attempt I'll try
+reference counting rather than cloning the whole recursive data structure. But
+this works I think? Hard to tell exactly. To me the non-recursive is so much
+harder to follow. Maybe it's wrong right now.

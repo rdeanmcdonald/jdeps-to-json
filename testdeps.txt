@@ -1,4 +1,4 @@
    io.wisesystems.a                             -> io.wisesystems.b     some.jar
    io.wisesystems.a                             -> io.wisesystems.c     some.jar
    io.wisesystems.c                             -> io.wisesystems.e     some.jar
-   io.wisesystems.c                             -> io.wisesystems.d     some.jar
+   io.wisesystems.c                             -> io.wisesystems.a     some.jar
