@@ -28,16 +28,16 @@ representing the recurrsive decent into it's dependencies, like so:
 ``` json
 {
   "name": "my.root.package",
-  "internal": true,
+    "circular_with": [],
   "deps": [
     {
       "name": "my.root.package.dep1",
-      "internal": true,
+      "circular_with": ["depa", "depb"],
       "deps": [...]
     },
     {
       "name": "org.external.dep1",
-      "internal": false,
+      "circular_with": [],
       "deps": [...]
     }
   ]
@@ -46,3 +46,10 @@ representing the recurrsive decent into it's dependencies, like so:
 
 This helper bin takes in a file path to the jdeps output, and it takes in your
 root package name, and it spits out json to stdout.
+
+NOTE: Right now I use recursion, so the stack overflows for large deps :(. I
+would like to figure out how to get around that, but the recursive function is
+so logical. I added an `-includes` arg which allows you only to include the
+packages you want in the json. Passing this flag allows me to avoid the stack
+overflow for my project, since I only really need to know about shared
+_internal_ deps.

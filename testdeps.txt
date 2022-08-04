@@ -1,4 +1,4 @@
-   my.package.a                             -> my.package.b     some.jar
-   my.package.a                             -> my.package.c     some.jar
-   my.package.c                             -> my.package.e     some.jar
-   my.package.c                             -> my.package.a     some.jar
+   io.wisesystems.a                             -> io.wisesystems.b     some.jar
+   io.wisesystems.a                             -> io.wisesystems.c     some.jar
+   io.wisesystems.c                             -> io.wisesystems.e     some.jar
+   io.wisesystems.c                             -> io.wisesystems.d     some.jar
