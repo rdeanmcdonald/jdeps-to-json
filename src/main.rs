@@ -1,5 +1,6 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
@@ -25,8 +26,8 @@ struct Args {
 
 #[derive(Debug, Serialize)]
 struct Package {
-    child_of: Vec<String>,
-    parent_of: Vec<String>,
+    child_of: HashSet<String>,
+    parent_of: HashSet<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -90,18 +91,18 @@ fn main() {
 
             match maybe_package {
                 None => {
-                    let mut new_parent = Vec::new();
-                    new_parent.push(child.to_string());
+                    let mut new_parent = HashSet::new();
+                    new_parent.insert(child.to_string());
                     packages.insert(
                         package_name.clone(),
                         Package {
-                            child_of: Vec::new(),
+                            child_of: HashSet::new(),
                             parent_of: new_parent,
                         },
                     );
                 }
                 Some(package) => {
-                    package.parent_of.push(child.to_string());
+                    package.parent_of.insert(child.to_string());
                 }
             }
         }
@@ -111,18 +112,18 @@ fn main() {
 
             match maybe_child_package {
                 None => {
-                    let mut new_child = Vec::new();
-                    new_child.push(package_name);
+                    let mut new_child = HashSet::new();
+                    new_child.insert(package_name);
                     packages.insert(
                         child.to_string(),
                         Package {
                             child_of: new_child,
-                            parent_of: Vec::new(),
+                            parent_of: HashSet::new(),
                         },
                     );
                 }
                 Some(package) => {
-                    package.child_of.push(package_name.clone());
+                    package.child_of.insert(package_name.clone());
                 }
             }
         }
@@ -166,12 +167,16 @@ impl<T> Stack<T> {
 fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPackage {
     // returns an expanded package
 
+    // with circular deps, for a given root, just mutate the packages obj to
+    // take the root out of the circular dep e.g. if a is the root, and it's
+    // circular with a child c, the take a out of the child deps of c, and boom,
+    // c will show in a's deps now
     let mut fully_expanded_packages: HashMap<String, ExpandedPackage> = HashMap::new();
     let root_package = match packages.get(package_name) {
         None => panic!("Invalid package provided {}", package_name),
         Some(p) => p,
     };
-    let mut stack: Stack<ExpandedPackage> = Stack::new();
+    let mut stack: Stack<RefCell<ExpandedPackage>> = Stack::new();
     let root_circular_with = get_circular_deps(root_package);
     let mut children = vec![];
     for child in root_package.parent_of.iter() {
@@ -192,22 +197,22 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
     //     deps: vec![],
     // };
 
-    stack.push(expanded_root_package);
-    let mut count = 0;
+    stack.push(RefCell::new(expanded_root_package));
+    // let mut count = 0;
     loop {
         let now = Instant::now();
-        count += 1;
+        // count += 1;
         if stack.is_empty() {
             // final_answer = current_expanded_package;
             break;
         }
         let mut current_expanded_package = stack.pop().unwrap();
 
-        let package_name = &current_expanded_package.name;
-
-        if current_expanded_package.children.len() == 0 {
+        let children_left = current_expanded_package.borrow().children.len() > 0;
+        if !children_left {
             // all the children are expanded, now add them to deps
-            let package = match packages.get(package_name) {
+            let package_name = current_expanded_package.borrow().name.clone();
+            let package = match packages.get(&package_name) {
                 None => panic!("Invalid package provided {}", package_name),
                 Some(p) => p,
             };
@@ -217,6 +222,7 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
                 match fully_expanded_packages.get(dep_name) {
                     Some(dep_expanded_package) => {
                         current_expanded_package
+                            .borrow_mut()
                             .deps
                             .push(dep_expanded_package.clone());
                     }
@@ -229,14 +235,21 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
             }
 
             let now = Instant::now();
-            fully_expanded_packages.insert(package_name.clone(), current_expanded_package.clone());
+            fully_expanded_packages.insert(
+                package_name.clone(),
+                current_expanded_package.borrow_mut().clone(),
+            );
             let elapsed = now.elapsed();
             eprintln!("TIME FOR CLONING PACKAGE {:.2?}", elapsed);
             continue;
         }
 
         // we know there's at least 1 dep
-        let dep_name = current_expanded_package.children.pop().unwrap();
+        let dep_name = current_expanded_package
+            .borrow_mut()
+            .children
+            .pop()
+            .unwrap();
         let dep_package = match packages.get(&dep_name) {
             None => panic!("Invalid package provided {}", dep_name),
             Some(p) => p,
@@ -254,10 +267,11 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
             children: dep_children,
             deps: vec![],
         };
+
         // now we add the current package back to the stack, then add the next
         // package to the stack
         stack.push(current_expanded_package);
-        stack.push(next_expanded_package);
+        stack.push(RefCell::new(next_expanded_package));
         let elapsed = now.elapsed();
         eprintln!("TIME FULL ITER {:.2?}", elapsed);
     }
