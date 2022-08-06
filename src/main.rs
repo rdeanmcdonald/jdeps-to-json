@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, prelude::*, BufReader};
 use std::process::exit;
+use std::rc::Rc;
 use std::time::Instant;
 
 #[derive(Parser, Debug)]
@@ -36,7 +37,7 @@ struct ExpandedPackage {
     name: String,
     #[serde(skip_serializing)]
     children: Vec<String>,
-    deps: Vec<ExpandedPackage>,
+    deps: Vec<Rc<RefCell<ExpandedPackage>>>,
 }
 
 type Packages = HashMap<String, Package>;
@@ -164,14 +165,14 @@ impl<T> Stack<T> {
     }
 }
 
-fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPackage {
+fn expand_package_iter(package_name: &String, packages: &Packages) -> Rc<RefCell<ExpandedPackage>> {
     // returns an expanded package
 
     // with circular deps, for a given root, just mutate the packages obj to
     // take the root out of the circular dep e.g. if a is the root, and it's
     // circular with a child c, the take a out of the child deps of c, and boom,
     // c will show in a's deps now
-    let mut fully_expanded_packages: HashMap<String, ExpandedPackage> = HashMap::new();
+    let mut fully_expanded_packages: HashMap<String, Rc<RefCell<ExpandedPackage>>> = HashMap::new();
     let root_package = match packages.get(package_name) {
         None => panic!("Invalid package provided {}", package_name),
         Some(p) => p,
@@ -190,20 +191,11 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
         children,
         deps: vec![],
     };
-    // let final_answer: ExpandedPackage = ExpandedPackage {
-    //     circular_with: root_circular_with,
-    //     name: package_name.clone(),
-    //     children: vec![],
-    //     deps: vec![],
-    // };
 
     stack.push(RefCell::new(expanded_root_package));
-    // let mut count = 0;
     loop {
         let now = Instant::now();
-        // count += 1;
         if stack.is_empty() {
-            // final_answer = current_expanded_package;
             break;
         }
         let mut current_expanded_package = stack.pop().unwrap();
@@ -224,7 +216,7 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
                         current_expanded_package
                             .borrow_mut()
                             .deps
-                            .push(dep_expanded_package.clone());
+                            .push(Rc::clone(dep_expanded_package));
                     }
                     None => {
                         // this means we likely hit one of the circular deps
@@ -235,10 +227,8 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
             }
 
             let now = Instant::now();
-            fully_expanded_packages.insert(
-                package_name.clone(),
-                current_expanded_package.borrow_mut().clone(),
-            );
+            let saved_package = Rc::new(current_expanded_package);
+            fully_expanded_packages.insert(package_name.clone(), saved_package);
             let elapsed = now.elapsed();
             eprintln!("TIME FOR CLONING PACKAGE {:.2?}", elapsed);
             continue;
@@ -276,7 +266,8 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> ExpandedPa
         eprintln!("TIME FULL ITER {:.2?}", elapsed);
     }
 
-    fully_expanded_packages.get(package_name).unwrap().clone()
+    let refcell_package = fully_expanded_packages.get(package_name).unwrap();
+    Rc::clone(refcell_package)
 }
 
 fn get_circular_deps(package: &Package) -> Vec<String> {
@@ -288,34 +279,4 @@ fn get_circular_deps(package: &Package) -> Vec<String> {
         }
     }
     circ_deps
-}
-
-fn expand_package(package_name: &String, packages: &Packages) -> ExpandedPackage {
-    let package = match packages.get(package_name) {
-        None => panic!("Invalid package provided {}", package_name),
-        Some(p) => p,
-    };
-
-    // let circ_deps_iter: HashSet<_> = package.parent_of.intersection(&package.child_of).collect();
-    // let mut circular_deps: Vec<String> = Vec::new();
-    // for dep in circ_deps_iter {
-    //     circular_deps.push(dep.clone());
-    // }
-    let circular_deps = get_circular_deps(package);
-
-    let mut expanded_package = ExpandedPackage {
-        circular_with: circular_deps.clone(),
-        name: package_name.clone(),
-        children: vec![],
-        deps: vec![],
-    };
-
-    for dep in package.parent_of.iter() {
-        if !circular_deps.contains(dep) {
-            let expanded_dep = expand_package(dep, packages);
-            expanded_package.deps.push(expanded_dep);
-        }
-    }
-
-    expanded_package
 }
