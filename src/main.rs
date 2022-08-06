@@ -43,6 +43,7 @@ struct ExpandedPackage {
 type Packages = HashMap<String, Package>;
 
 fn main() {
+    let now = Instant::now();
     let args = Args::parse();
 
     let file = File::open(args.jdeps_path).unwrap();
@@ -134,7 +135,8 @@ fn main() {
     let results_file = io::stdout();
     // let expanded_package = expand_package(&args.package, &packages);
     let expanded_package = expand_package_iter(&args.package, &packages);
-    eprintln!("EXPANDED PACKAGE");
+    let elapsed = now.elapsed();
+    eprintln!("TOTAL TIME WAS {:.2?}", elapsed);
     // serde_json::to_writer_pretty(&results_file, &packages).unwrap();
     serde_json::to_writer_pretty(&results_file, &expanded_package).unwrap();
     // println!("EXPANDED PACKAGE: {:#?}", expanded_package);
@@ -200,10 +202,10 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> Rc<RefCell
         }
         let mut current_expanded_package = stack.pop().unwrap();
 
+        let package_name = current_expanded_package.borrow().name.clone();
         let children_left = current_expanded_package.borrow().children.len() > 0;
         if !children_left {
             // all the children are expanded, now add them to deps
-            let package_name = current_expanded_package.borrow().name.clone();
             let package = match packages.get(&package_name) {
                 None => panic!("Invalid package provided {}", package_name),
                 Some(p) => p,
@@ -219,7 +221,7 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> Rc<RefCell
                             .push(Rc::clone(dep_expanded_package));
                     }
                     None => {
-                        // this means we likely hit one of the circular deps
+                        // this is a circular dep
                     }
                 }
                 let elapsed = now.elapsed();
@@ -278,5 +280,6 @@ fn get_circular_deps(package: &Package) -> Vec<String> {
             circ_deps.push(child_dep.clone());
         }
     }
+    eprintln!("CIRC DEPS: {:#?}", circ_deps);
     circ_deps
 }
