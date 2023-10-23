@@ -1,5 +1,6 @@
 use clap::Parser;
 use serde::{Deserialize, Serialize};
+use std::borrow::Borrow;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
@@ -200,9 +201,17 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> Rc<RefCell
         if stack.is_empty() {
             break;
         }
-        let mut current_expanded_package = stack.pop().unwrap();
+        let current_expanded_package = stack.pop().unwrap();
 
         let package_name = current_expanded_package.borrow().name.clone();
+        let printable_name = package_name.clone() + "                               ";
+        let printable_deps = std::cmp::min(current_expanded_package.borrow().children.len(), 2);
+        // eprintln!("PACKAGE: {}", package_name);
+        // eprintln!(
+        //     "{:?} : {:?}",
+        //     &printable_name[..50],
+        //     &current_expanded_package.borrow().children[..printable_deps]
+        // );
         let children_left = current_expanded_package.borrow().children.len() > 0;
         if !children_left {
             // all the children are expanded, now add them to deps
@@ -224,15 +233,15 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> Rc<RefCell
                         // this is a circular dep
                     }
                 }
-                let elapsed = now.elapsed();
-                eprintln!("TIME FOR CLONING DEP {:.2?}", elapsed);
+                // let elapsed = now.elapsed();
+                // eprintln!("TIME FOR CLONING DEP {:.2?}", elapsed);
             }
 
             let now = Instant::now();
             let saved_package = Rc::new(current_expanded_package);
-            fully_expanded_packages.insert(package_name.clone(), saved_package);
-            let elapsed = now.elapsed();
-            eprintln!("TIME FOR CLONING PACKAGE {:.2?}", elapsed);
+            fully_expanded_packages.insert(package_name, saved_package);
+            // let elapsed = now.elapsed();
+            // eprintln!("TIME FOR CLONING PACKAGE {:.2?}", elapsed);
             continue;
         }
 
@@ -264,8 +273,8 @@ fn expand_package_iter(package_name: &String, packages: &Packages) -> Rc<RefCell
         // package to the stack
         stack.push(current_expanded_package);
         stack.push(RefCell::new(next_expanded_package));
-        let elapsed = now.elapsed();
-        eprintln!("TIME FULL ITER {:.2?}", elapsed);
+        // let elapsed = now.elapsed();
+        // eprintln!("TIME FULL ITER {:.2?}", elapsed);
     }
 
     let refcell_package = fully_expanded_packages.get(package_name).unwrap();
@@ -280,6 +289,5 @@ fn get_circular_deps(package: &Package) -> Vec<String> {
             circ_deps.push(child_dep.clone());
         }
     }
-    eprintln!("CIRC DEPS: {:#?}", circ_deps);
     circ_deps
 }
